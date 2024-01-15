@@ -15,7 +15,7 @@ class AutoDetectDecoderStream extends Transform {
      * @constructor
      */
     constructor(options) {
-        super({encoding: 'utf8'});
+        super();
 
         options = options || {};
 
@@ -68,10 +68,20 @@ class AutoDetectDecoderStream extends Transform {
 
             }
 
+            if (this._detectedEncoding === 'buffer') {
+                if (this._detectionBuffer.length > 0) {
+                    this.push(this._detectionBuffer);
+                }
+                delete this._detectionBuffer;
+                return;
+            }
+
             this.conv = Iconv.getDecoder(this._detectedEncoding, this._iconvOptions);
 
             const res = this.conv.write(this._detectionBuffer);
             delete this._detectionBuffer;
+
+            this.setEncoding('utf8');
 
             if (res && res.length > 0) {
                 this.push(res, this.encoding);
@@ -83,6 +93,13 @@ class AutoDetectDecoderStream extends Transform {
     _transform(chunk, encoding, done) {
         if (!Buffer.isBuffer(chunk))
             return done(new Error("Iconv decoding stream needs buffers as its input."));
+
+        if (this._detectedEncoding === 'buffer') {
+            if (chunk && chunk.length > 0) {
+                this.push(chunk);
+            }
+            return done();
+        }
 
         try {
             if (this._detectedEncoding) {
@@ -106,6 +123,10 @@ class AutoDetectDecoderStream extends Transform {
 
             if (!this._detectedEncoding) {
                 this._consumeBufferForDetection(null);
+				return done();
+            }
+
+            if (this._detectedEncoding === 'buffer') {
 				return done();
             }
 
